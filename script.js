@@ -1,130 +1,107 @@
-document.addEventListener('DOMContentLoaded', () => {
-    const fileInput = document.getElementById('fileInput');
-    const treeView = document.getElementById('treeView');
-    const detailView = document.getElementById('detailView');
-    let jsonData = null;
+document.getElementById('fileInput').addEventListener('change', handleFileSelect);
 
-    fileInput.addEventListener('change', handleFileSelect, false);
-
-    function handleFileSelect(event) {
-        const file = event.target.files[0];
-        if (!file) {
-            return;
-        }
-
+function handleFileSelect(event) {
+    const file = event.target.files[0];
+    if (file) {
         const reader = new FileReader();
         reader.onload = function(e) {
+            const content = e.target.result;
             try {
-                jsonData = JSON.parse(e.target.result);
-                displayTreeView(jsonData);
-                displayInitialDetail(jsonData);
+                const data = JSON.parse(content);
+                buildTreeView(data);
             } catch (error) {
                 alert('Error parsing JSON file: ' + error.message);
             }
         };
         reader.readAsText(file);
     }
+}
 
-    function displayTreeView(data) {
-        treeView.innerHTML = '';
-        const ul = document.createElement('ul');
+function buildTreeView(data) {
+    const treeView = document.getElementById('treeView');
+    treeView.innerHTML = '';
 
-        const mainNode = createClickableNode(data.title, () => displayInitialDetail(data));
-        ul.appendChild(mainNode);
+    const ul = document.createElement('ul');
 
-        if (data.traces && data.traces.length > 0) {
-            const tracesUl = document.createElement('ul');
-            tracesUl.classList.add('nested');
-            mainNode.appendChild(tracesUl);
+    // Root node
+    const rootLi = document.createElement('li');
+    const rootSpan = document.createElement('span');
+    rootSpan.className = 'caret';
+    rootSpan.textContent = data.title;
+    rootSpan.addEventListener('click', function() {
+        this.parentElement.querySelector('.nested').classList.toggle('active');
+        this.classList.toggle('caret-down');
+    });
+    rootLi.appendChild(rootSpan);
 
-            const caret = document.createElement('span');
-            caret.classList.add('caret');
-            mainNode.insertBefore(caret, mainNode.firstChild);
+    const nestedUl = document.createElement('ul');
+    nestedUl.className = 'nested';
 
-            caret.addEventListener('click', (e) => {
-                e.stopPropagation();
-                tracesUl.classList.toggle('active');
-                caret.classList.toggle('caret-down');
-            });
-
-            data.traces.forEach(trace => {
-                const traceNode = createClickableNode(trace.title, () => displayTraceDetails(trace));
-                tracesUl.appendChild(traceNode);
-
-                if (trace.locations && trace.locations.length > 0) {
-                    const locationsUl = document.createElement('ul');
-                    locationsUl.classList.add('nested');
-                    traceNode.appendChild(locationsUl);
-
-                    const traceCaret = document.createElement('span');
-                    traceCaret.classList.add('caret');
-                    traceNode.insertBefore(traceCaret, traceNode.firstChild);
-
-                    traceCaret.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        locationsUl.classList.toggle('active');
-                        traceCaret.classList.toggle('caret-down');
-                    });
-
-                    trace.locations.forEach(location => {
-                        const locationNode = createClickableNode(location.title, () => displayLocationDetails(location));
-                        locationsUl.appendChild(locationNode);
-                    });
-                }
-            });
-        }
-        treeView.appendChild(ul);
-    }
-
-    function createClickableNode(text, onClick) {
-        const li = document.createElement('li');
-        li.textContent = text;
-        li.addEventListener('click', (e) => {
-            e.stopPropagation();
-            onClick();
+    data.traces.forEach(trace => {
+        const traceLi = document.createElement('li');
+        const traceSpan = document.createElement('span');
+        traceSpan.className = 'caret';
+        traceSpan.textContent = trace.title;
+        traceSpan.addEventListener('click', function() {
+            this.parentElement.querySelector('.nested').classList.toggle('active');
+            this.classList.toggle('caret-down');
         });
-        return li;
-    }
+        traceLi.appendChild(traceSpan);
 
-    function displayInitialDetail(data) {
-        detailView.innerHTML = `
-            <h1>${data.title}</h1>
-            <p>${data.description || ''}</p>
-            <hr>
-            <h2>Metadata</h2>
-            <pre>${JSON.stringify(data.metadata, null, 2)}</pre>
-        `;
-    }
+        traceLi.addEventListener('click', (event) => {
+            event.stopPropagation();
+            displayTraceDetails(trace);
+        });
 
-    function displayTraceDetails(trace) {
-        detailView.innerHTML = `
-            <h2>${trace.title}</h2>
-            <p>${trace.description}</p>
-            <h3>Trace Guide</h3>
-            <div>${formatTraceGuide(trace.traceGuide)}</div>
-            <h3>Trace Diagram</h3>
-            <pre>${trace.traceTextDiagram}</pre>
-        `;
-    }
+        const locationsUl = document.createElement('ul');
+        locationsUl.className = 'nested';
 
-    function displayLocationDetails(location) {
-        detailView.innerHTML = `
-            <h3>${location.title}</h3>
-            <p><strong>Path:</strong> ${location.path}</p>
-            <p><strong>Line:</strong> ${location.lineNumber}</p>
-            <p><strong>Description:</strong> ${location.description}</p>
-            <pre><code>${location.lineContent}</code></pre>
-        `;
-    }
+        trace.locations.forEach(location => {
+            const locationLi = document.createElement('li');
+            locationLi.textContent = location.title;
+            locationLi.addEventListener('click', (event) => {
+                event.stopPropagation();
+                displayLocationDetails(location, trace.traceGuide);
+            });
+            locationsUl.appendChild(locationLi);
+        });
+        traceLi.appendChild(locationsUl);
+        nestedUl.appendChild(traceLi);
+    });
 
-    function formatTraceGuide(guide) {
-        if (!guide) return '';
-        // Simple formatting for markdown-like text
-        return guide
-            .split('\n\n').map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('')
-            .replace(/##\s(.+)/g, '<h3>$1</h3>')
-            .replace(/#\s(.+)/g, '<h2>$1</h2>')
-            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-            .replace(/\[(.+?)\]/g, '<code>$1</code>');
+    rootLi.appendChild(nestedUl);
+    ul.appendChild(rootLi);
+    treeView.appendChild(ul);
+}
+
+function displayTraceDetails(trace) {
+    const detailView = document.getElementById('detailView');
+    let content = `<h2>${trace.title}</h2>`;
+    content += `<p>${trace.description}</p>`;
+    if (trace.traceTextDiagram) {
+        content += `<h3>Trace Diagram</h3><pre>${trace.traceTextDiagram}</pre>`;
     }
-});
+    if (trace.traceGuide) {
+        content += `<h3>Trace Guide</h3><div>${formatTraceGuide(trace.traceGuide)}</div>`;
+    }
+    detailView.innerHTML = content;
+}
+
+function displayLocationDetails(location, traceGuide) {
+    const detailView = document.getElementById('detailView');
+    let content = `<h2>${location.title}</h2>`;
+    content += `<p><strong>Path:</strong> ${location.path}</p>`;
+    content += `<p><strong>Line:</strong> ${location.lineNumber}</p>`;
+    content += `<p><strong>Code:</strong> <code>${location.lineContent}</code></p>`;
+    content += `<p>${location.description}</p>`;
+    if (traceGuide) {
+        content += `<h3>Trace Guide</h3><div>${formatTraceGuide(traceGuide)}</div>`;
+    }
+    detailView.innerHTML = content;
+}
+
+function formatTraceGuide(traceGuide) {
+    let html = traceGuide.replace(/\\n/g, '<br>');
+    html = html.replace(/(\*\*|##)(.*?)\1/g, '<strong>$2</strong>');
+    return html;
+}
